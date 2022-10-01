@@ -3,7 +3,7 @@
 import sys
 from typing import Tuple
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from argparse import ArgumentParser
 
@@ -19,6 +19,10 @@ def resize_image(image: Image, resolution: Tuple[int,int]):
     left_offset = int((canvas.width - image.width) / 2)
     canvas.paste(image, (left_offset, 0))
     
+    drawspace = ImageDraw.Draw(canvas)
+    drawspace.text((2, 36), "<- swap", fill='white')
+    drawspace.text((2, 372), "<- make", fill='white')
+
     return canvas
 
 
@@ -40,7 +44,8 @@ def main():
     canvas = Image.new(mode="RGB", size=inky.resolution)
 
     left_offset = int((canvas.width - image.width) / 2)
-    canvas.paste(image, (left_offset, 0))
+    top_offset = int((canvas.height - image.height) / 2)
+    canvas.paste(image, (left_offset, top_offset))
     
     inky.set_image(canvas, saturation=args.saturation)
     inky.show()

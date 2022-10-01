@@ -159,18 +159,24 @@ class ImageDisplayer(ButtonHandler):
     def a(self):
         if not self.is_before_min_display_time():
             self.select_next()
+            self.display_selected()
 
     def b(self):
-        if not self.is_before_min_display_time():
-            self.select_next()
+        # if not self.is_before_min_display_time():
+        #     self.select_next()
+        #     self.display_selected()
+        pass
 
     def c(self):
-        if not self.is_before_min_display_time():
-            self.select_next()
+        # if not self.is_before_min_display_time():
+        #     self.select_next()
+        #     self.display_selected()
+        pass
 
     def d(self):
         if not self.is_before_min_display_time():
             self.select_next()
+            self.display_selected()
 
 
 def main():

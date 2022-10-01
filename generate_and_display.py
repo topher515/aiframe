@@ -8,7 +8,7 @@ from typing import Tuple
 
 import requests
 from dalle2 import Dalle2
-from PIL import Image
+from PIL import Image, ImageDraw
 
 try:
     from inky.auto import auto
@@ -23,7 +23,6 @@ OPENAPI_BEARER_TOKEN = os.environ.get("OPENAPI_BEARER_TOKEN")
 DEF_RES = (600, 448)
 
 def generate_and_open_image(prompt: str) -> Image:
-
 
     class DalleSmallBatch(Dalle2):
         def __init__(self, bearer):
@@ -47,7 +46,12 @@ def resize_image(image: Image, resolution: Tuple[int,int]):
     canvas = Image.new(mode="RGBA", size=resolution)
 
     left_offset = int((canvas.width - image.width) / 2)
-    canvas.paste(image, (left_offset, 0))
+    top_offset = int((canvas.height - image.height) / 2)
+    canvas.paste(image, (left_offset, top_offset))
+
+    drawspace = ImageDraw.Draw(canvas)
+    drawspace.text((2, 36), "<- swap", fill='white')
+    drawspace.text((2, 372), "<- make", fill='white')
     
     return canvas
 
