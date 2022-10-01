@@ -1,0 +1,16 @@
+[Unit]
+Description=AIFRame Runner
+After=multi-user.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/app
+Restart=on-failure
+RestartSec=5s
+ExecStart=/usr/bin/env python3 /home/pi/app/aiframe_runner.py
+StandardOutput=append:/var/log/aiframe.log
+StandardError=append:/var/log/aiframe.log
+SyslogIdentifier=aiframe_runner
+
+[Install]
+WantedBy=multi-user.target

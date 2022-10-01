@@ -34,8 +34,21 @@
 
 - 
 
-## Setup RPI
+## Setup RPi
+
+- Setup ssh: `export RPI_IP={the rpi ip address}`
+
+- SSH to RPi
 
 - curl https://get.pimoroni.com/ink | bash
 
 - Then manually use `pip3` to install all the stuff in `Pipfile` (pipenv isnt working on my rpi as of now)
+
+- Deploy (i.e., "copy") software to rpi (from host): `./deploy.sh`
+
+- Enable the service on RPi:
+  - `sudo cp aiframe.service /etc/systemd/system/`
+  - `sudo systemctl enable aiframe`  # So it starts on startup
+  - `sudo systemctl start aiframe`
+  - `sudo systemctl status aiframe`  # Check the status
+  - `tail -f /var/log/aiframe.log`   # Tail the logs

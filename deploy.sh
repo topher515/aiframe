@@ -2,6 +2,7 @@
 
 scp -r \
     Pipfile \
+    aiframe.service \
     aiframe_runner.py \
     disp_image.py \
     generate_and_display.py \
