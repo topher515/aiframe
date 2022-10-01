@@ -1,13 +1,6 @@
-## Dev Setup on Mac
+## Setup APIs
 
-- install brew install portaudio   # needed to support pyaudio
-
-
-## Setup
-
-- curl https://get.pimoroni.com/ink | bash
-
-
+## Setup RPI
 
 - In google cloud console
 - gcloud iam service-accounts create \
@@ -27,3 +20,14 @@
 
 - export \
     GOOGLE_APPLICATION_CREDENTIALS=speech-to-text-key.json
+
+
+
+## Dev Setup on Mac
+
+- install pyaudio with:
+    - `CFLAGS="-I/opt/homebrew/include -L/opt/homebrew/lib" python3 -m pip install pyaudio`
+
+
+## Setup RPI
+
