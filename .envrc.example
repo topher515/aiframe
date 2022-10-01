@@ -1,4 +1,3 @@
 export RPI_IP=192.168.1.208
 export OPENAPI_BEARER_TOKEN='sess-dYHWY.....hfFdkA'
-export PROJECT_ID='foobar'  # gcp project id
 export GOOGLE_APPLICATION_CREDENTIALS='speech-to-text-key.json'  # This file must exist

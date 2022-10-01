@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import os
 import sys
 import wave
 from argparse import ArgumentParser
@@ -9,7 +8,6 @@ from io import BytesIO
 import pyaudio
 from google.cloud import speech
 from playsound import playsound
-from pynput import keyboard
 
 SAMPLE_RATE = 16000
 
@@ -71,9 +69,8 @@ def record_audio(seconds: int) -> BytesIO:
     def on_press():
         dummy.recording = False
 
-    listener = keyboard.Listener(on_press=on_press)
-    listener.start() 
-
+    # listener = keyboard.Listener(on_press=on_press)
+    # listener.start() 
 
     stream = p.open(format=sample_format,
                     channels=channels,
@@ -92,7 +89,7 @@ def record_audio(seconds: int) -> BytesIO:
             print("Exit early", file=sys.stderr)
             break
 
-    listener.stop()
+    # listener.stop()
 
     # Stop and close the stream 
     stream.stop_stream()
