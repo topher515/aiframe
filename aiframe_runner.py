@@ -5,7 +5,7 @@ import os
 import signal
 import sys
 import threading
-from random import choice, randint
+from random import choice, randint, random
 from time import sleep, time
 import subprocess
 
@@ -98,6 +98,7 @@ class ImageDisplayer(ButtonHandler):
         self.displayed_img_path = None
         self.selected_img_path = None
         self.displayed_at_time = None
+        self.min_display_secs = 28  # ~30 secs min display time
         self.max_display_secs = 30 * 60  # 30 mins max display time
 
     def get_avail_img_paths(self):   
@@ -118,6 +119,10 @@ class ImageDisplayer(ButtonHandler):
         return img_paths[index]
 
 
+    def select_random(self):
+        self.selected_img_path = choice(self.get_avail_img_paths())
+
+
     def select_next(self):
         self.selected_img_path = self.get_next_img_path()
         print(f"Selecting img '{self.selected_img_path}'", file=sys.stderr)
@@ -131,35 +136,49 @@ class ImageDisplayer(ButtonHandler):
         if self.selected_img_path != self.displayed_img_path:
             self.display_selected()
 
-        if self.displayed_at_time and self.displayed_at_time + self.max_display_secs < time():
+        if self.is_after_max_display_time():
             self.select_next()
             self.display_selected()
 
+    def is_after_max_display_time(self):
+        return self.displayed_at_time and self.displayed_at_time + self.max_display_secs < time()
+
+    def is_before_min_display_time(self):
+        return self.displayed_at_time and self.displayed_at_time + self.min_display_secs > time()
 
     def display_selected(self):
+        if self.is_before_min_display_time():
+            print(f"Refusing to display image because one was displayed {self.displayed_at_time - time()} seconds ago", file=sys.stderr)
+            return
+
         self.displayed_img_path = self.selected_img_path
         self.displayed_at_time = time()
         print(f"Displaying img '{self.displayed_img_path}'", file=sys.stderr)
         subprocess.run(["pipenv", "run", "./disp_image.py", self.displayed_img_path])
 
     def a(self):
-        self.select_next()
+        if not self.is_before_min_display_time():
+            self.select_next()
 
     def b(self):
-        self.select_next()
+        if not self.is_before_min_display_time():
+            self.select_next()
 
     def c(self):
-        self.select_next()
+        if not self.is_before_min_display_time():
+            self.select_next()
 
     def d(self):
-        self.select_next()
+        if not self.is_before_min_display_time():
+            self.select_next()
 
 
 def main():
     displayer = ImageDisplayer()
+    displayer.select_random()
 
-    # watch_gpio_buttons(displayer)
-    watch_fake_random_buttons(displayer)  # For debugging
+    watch_gpio_buttons(displayer)
+    # watch_fake_random_buttons(displayer)  # For debugging
 
     while True:
         displayer.poke()

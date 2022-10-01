@@ -1,3 +1,4 @@
 .envrc
 speech-to-text-key.json
 imgs
+.DS_Store
