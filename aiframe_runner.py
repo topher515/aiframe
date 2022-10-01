@@ -1,84 +1,38 @@
 #!/usr/bin/env python3
 
-import glob
+import argparse
 import os
 import signal
 import sys
 import threading
-from random import choice, randint, random
+import traceback
+from dataclasses import dataclass
+from enum import Enum, auto
+from random import choice, randint
 from time import sleep, time
-import subprocess
+from typing import Optional
+
+from lib.ai_generator import generate_image
+from lib.gpio_watcher import watch_gpio_buttons
+from lib.io_watcher import ButtonHandler
+from lib.keyboard_watcher import watch_keyboard_buttons
+from lib.model import ImageDataModel
+from lib.recording import record_audio
+from lib.transcribe import transcribe_speech
+from lib.ux_feedback_audio import (play_failure, play_interact, play_refusal,
+                                   play_success, play_thinking, play_voicemail_beep)
+from lib.view import DesktopRenderer, ImageRenderer, InkyRenderer, ViewState
 
 try:
-    import RPi.GPIO as GPIO
+    from inky.auto import auto as auto_inky_setup
 except ImportError:
-    GPIO = None
-    print("Failed to import RPi.GPIO. Probably running on desktop")
-import subprocess
+    auto_inky_setup = None
 
+AUDIO_REC_SECS = 7
+MIN_DISPLAY_SECS = 28
+MAX_DISPLAY_SECS = 30 * 60 
 
-class ButtonHandler:
-    def press_a(self):
-        print("Pressed A", file=sys.stderr)
-        self.a()
-
-    def press_b(self):
-        print("Pressed B", file=sys.stderr)
-        self.b()
-        
-    def press_c(self):
-        print("Pressed C", file=sys.stderr)
-        self.c()
-        
-    def press_d(self):
-        print("Pressed D", file=sys.stderr)
-        self.d()
-
-    def a(self):
-        ...
-    def b(self):
-        ...
-    def c(self):
-        ...
-    def d(self):
-        ...  
-
-def watch_gpio_buttons(button_handler: ButtonHandler):
-    # Gpio pins for each button (from top to bottom)
-    BUTTONS = [5, 6, 16, 24]
-
-    # These correspond to buttons A, B, C and D respectively
-    LABELS = ['A', 'B', 'C', 'D']
-
-    # Set up RPi.GPIO with the "BCM" numbering scheme
-    GPIO.setmode(GPIO.BCM)
-
-    # Buttons connect to ground when pressed, so we should set them up
-    # with a "PULL UP", which weakly pulls the input signal to 3.3V.
-    GPIO.setup(BUTTONS, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-    # "handle_button" will be called every time a button is pressed
-    # It receives one argument: the associated input pin.
-    def handle_button(pin):
-        label = LABELS[BUTTONS.index(pin)]
-        if str(label) == 'A':
-            button_handler.press_a()
-        elif str(label) == 'B':
-            button_handler.press_b()
-        elif str(label) == 'C':
-            button_handler.press_c()
-        elif str(label) == 'D':
-            button_handler.press_d()
-
-    # Loop through out buttons and attach the "handle_button" function to each
-    # We're watching the "FALLING" edge (transition from 3.3V to Ground) and
-    # picking a generous bouncetime of 250ms to smooth out button presses.
-    for pin in BUTTONS:
-        GPIO.add_event_detect(pin, GPIO.FALLING, handle_button, bouncetime=250)
-
-    # Finally, since button handlers don't require a "while True" loop,
-    # we pause the script to prevent it exiting immediately.
-    # signal.pause()
+OPENAPI_BEARER_TOKEN = os.environ.get("OPENAPI_BEARER_TOKEN")
 
 
 def watch_fake_random_buttons(button_handler: ButtonHandler):
@@ -92,22 +46,31 @@ def watch_fake_random_buttons(button_handler: ButtonHandler):
     th.start()
 
 
-class ImageDisplayer(ButtonHandler):
+class DisplayState(Enum):
+    initializing = auto()
+    normal = auto()
+    waiting_new_img = auto()
+    newly_created_img = auto()
 
-    def __init__(self):
-        self.displayed_img_path = None
-        self.selected_img_path = None
-        self.displayed_at_time = None
-        self.min_display_secs = 28  # ~30 secs min display time
-        self.max_display_secs = 30 * 60  # 30 mins max display time
 
+@dataclass
+class AIFrameRunner(ButtonHandler):
+
+    renderer: ImageRenderer
+    displayed_img_path: str = None
+    # selected_img_path = None
+    displayed_at_time: float = None
+    min_display_secs: Optional[int] = MIN_DISPLAY_SECS  # ~30 secs min display time
+    max_display_secs = MAX_DISPLAY_SECS  # 30 mins max display time
+    display_state: DisplayState = DisplayState.initializing
+        
     def get_avail_img_paths(self):   
-        return glob.glob(os.path.join(os.getcwd(), "imgs", "*"))
+        return ImageDataModel().get_avail_images()
 
     def get_next_img_path(self):
         img_paths = self.get_avail_img_paths()
         try:
-            index = img_paths.index(self.selected_img_path)
+            index = img_paths.index(self.displayed_img_path)
         except ValueError:
             index = 0
         else:
@@ -118,27 +81,17 @@ class ImageDisplayer(ButtonHandler):
 
         return img_paths[index]
 
+    def display_random(self):
+        self.display(choice(self.get_avail_img_paths()))
 
-    def select_random(self):
-        self.selected_img_path = choice(self.get_avail_img_paths())
+    def display_next(self):
+        self.display(self.get_next_img_path())
 
-
-    def select_next(self):
-        self.selected_img_path = self.get_next_img_path()
-        print(f"Selecting img '{self.selected_img_path}'", file=sys.stderr)
-
+    # def display_normal()
 
     def poke(self):
-
-        if not self.selected_img_path:
-            self.select_next()
-
-        if self.selected_img_path != self.displayed_img_path:
-            self.display_selected()
-
         if self.is_after_max_display_time():
-            self.select_next()
-            self.display_selected()
+            self.display_next()
 
     def is_after_max_display_time(self):
         return self.displayed_at_time and self.displayed_at_time + self.max_display_secs < time()
@@ -146,49 +99,156 @@ class ImageDisplayer(ButtonHandler):
     def is_before_min_display_time(self):
         return self.displayed_at_time and self.displayed_at_time + self.min_display_secs > time()
 
-    def display_selected(self):
+    def display(self, img_path: str, as_new=False):
         if self.is_before_min_display_time():
             print(f"Refusing to display image because one was displayed {self.displayed_at_time - time()} seconds ago", file=sys.stderr)
             return
 
-        self.displayed_img_path = self.selected_img_path
+        print(f"Displaying img '{img_path}'", file=sys.stderr)
+        self.displayed_img_path = img_path
         self.displayed_at_time = time()
-        print(f"Displaying img '{self.displayed_img_path}'", file=sys.stderr)
-        subprocess.run(["pipenv", "run", "./disp_image.py", self.displayed_img_path])
+        self.display_state = DisplayState.newly_created_img if as_new else DisplayState.normal 
+        self.render()
+
+    def render(self):
+
+        rating = ImageDataModel().get_image_rating(self.displayed_img_path)
+
+        c_emoji = '?'
+        if self.display_state == DisplayState.newly_created_img:
+            c_emoji = '❌'
+        elif self.display_state == DisplayState.normal:
+            c_emoji = '👎'
+
+        view_state = ViewState(
+            a_btn_text='➡️',
+            b_btn_text='❤️' if rating < 0 else f'❤️ {rating}',
+            c_btn_text=c_emoji if rating > 0 else f'{c_emoji} {rating}',
+            d_btn_text='🎤',
+            img_path=self.displayed_img_path
+        )
+
+        if self.display_state == DisplayState.newly_created_img:
+            self.renderer.render(view_state)
+        elif self.display_state == DisplayState.normal:
+            self.renderer.render(view_state)
+
+        print(f"At after renderer btw", file=sys.stderr)
+
 
     def a(self):
+        if self.is_before_min_display_time():
+            play_refusal()
+            return
+
         if not self.is_before_min_display_time():
-            self.select_next()
-            self.display_selected()
+            self.display_next()
+            play_interact()
+
 
     def b(self):
-        # if not self.is_before_min_display_time():
-        #     self.select_next()
-        #     self.display_selected()
-        pass
+        # Button behaves like: "like"
+        if self.is_before_min_display_time():
+            play_refusal()
+            return
+
+        if self.display_state == DisplayState.newly_created_img:
+            ImageDataModel().incr_image_rating(self.displayed_img_path, 1)
+            play_interact()
+
+        elif self.display_state == DisplayState.normal:
+            ImageDataModel().incr_image_rating(self.displayed_img_path, 1)
+            play_interact()
+
 
     def c(self):
-        # if not self.is_before_min_display_time():
-        #     self.select_next()
-        #     self.display_selected()
-        pass
+        # Button behaves like: "dislike" / delete
+        if self.is_before_min_display_time():
+            play_refusal()
+            return
+
+        if self.display_state == DisplayState.newly_created_img:
+            ImageDataModel().delete_image(self.displayed_img_path)
+            play_interact()
+            
+        elif self.display_state == DisplayState.normal:
+            ImageDataModel().incr_image_rating(self.displayed_img_path, -1)
+            play_interact()
+        
+        else:
+            play_refusal()
+
 
     def d(self):
-        if not self.is_before_min_display_time():
-            self.select_next()
-            self.display_selected()
+        # Start record / transcribe / generate
+        if self.is_before_min_display_time():
+            play_refusal()
+            return
+
+        last_display_state = self.display_state
+        self.display_state = DisplayState.waiting_new_img
+        try:
+            play_voicemail_beep()
+            audio_buffer = record_audio(AUDIO_REC_SECS)
+            play_voicemail_beep()
+
+            audio_buffer.seek(0)
+
+            threading.Thread(target=play_thinking).start()
+            print("Begin transcribing...", file=sys.stderr)
+            transcription = transcribe_speech(audio_buffer)
+            img_buffer = generate_image(OPENAPI_BEARER_TOKEN, transcription)
+            img_buffer.seek(0)
+
+            with open('imgs/tmp-name.png', 'wb') as fp:
+                fp.write(img_buffer.read())
+
+            self.display('imgs/tmp-name.png', as_new=True)
+
+        except Exception as err:
+            print(f"Failed to display image: {err}", file=sys.stderr)
+            print(traceback.format_exc(), file=sys.stderr)
+            play_failure()
+            self.display_state = last_display_state
+        else:
+            play_success()
 
 
 def main():
-    displayer = ImageDisplayer()
-    displayer.select_random()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--watch', 
+        required=False,
+        help="Watch keyboard instead GPIO buttons", 
+        choices=["gpio","keyboard","random"], 
+        default="gpio"
+    )
 
-    watch_gpio_buttons(displayer)
-    # watch_fake_random_buttons(displayer)  # For debugging
+    args = parser.parse_args()
+
+    aiframerunner_kwargs = {}
+    if auto_inky_setup:
+        inky = auto_inky_setup()
+        renderer = InkyRenderer(inky=inky, resolution=inky.resolution)
+    else:
+        renderer = DesktopRenderer(resolution=(600, 448))
+        aiframerunner_kwargs = dict(min_display_secs=3)
+
+    runner = AIFrameRunner(renderer=renderer, **aiframerunner_kwargs)
+    runner.display_random()
+
+    if args.watch == 'keyboard':
+        watch_keyboard_buttons(runner)
+
+    elif args.watch == 'random':
+        watch_fake_random_buttons(runner)  # For debugging
+
+    else:
+        watch_gpio_buttons(runner)
 
     while True:
-        displayer.poke()
-        sleep(0.5)
+        runner.poke()
+        sleep(1)
 
 
 if __name__ == '__main__':

@@ -10,6 +10,8 @@ import requests
 from dalle2 import Dalle2
 from PIL import Image, ImageDraw
 
+from lib.ai_generator import generate_image
+
 try:
     from inky.auto import auto
 except ImportError:
@@ -22,24 +24,13 @@ OPENAPI_BEARER_TOKEN = os.environ.get("OPENAPI_BEARER_TOKEN")
 
 DEF_RES = (600, 448)
 
-def generate_and_open_image(prompt: str) -> Image:
 
-    class DalleSmallBatch(Dalle2):
-        def __init__(self, bearer):
-            super().__init__(bearer)
-            self.batch_size = 1
-        
-    dalle = DalleSmallBatch(OPENAPI_BEARER_TOKEN)
+def generate_and_open_image(prompt: str) -> Image.Image:
 
-    generations = dalle.generate(prompt)
-
-    print(f"Generated {len(generations)} images, btw", file=sys.stderr)
-    img_url: str = generations[0]["generation"]["image_path"]
-    response = requests.get(img_url)
-    return Image.open(BytesIO(response.content))
+    return Image.open(generate_image(OPENAPI_BEARER_TOKEN, prompt))
 
 
-def resize_image(image: Image, resolution: Tuple[int,int]):
+def resize_image(image: Image.Image, resolution: Tuple[int,int]):
 
     image.thumbnail(resolution)
 
