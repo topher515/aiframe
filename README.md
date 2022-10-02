@@ -1,3 +1,12 @@
+# AI Frame
+
+An eInk picture frame that you can describe the picture you want, and it will display it.
+
+Designed for Inky Impression's 5.7" 7 color eInk display.
+
+It uses Google API speech to text to transform your words into text; it uses
+OpenAI's Dalle to AI generate the prompt into an iamge.
+
 ## Setup APIs
 
 - Sign up for Dalle
@@ -31,8 +40,6 @@
 - install pyaudio with:
     - `CFLAGS="-I/opt/homebrew/include -L/opt/homebrew/lib" python3 -m pip install pyaudio`
     - or, maybe: `CFLAGS="-I/opt/homebrew/include -L/opt/homebrew/lib" pipenv install pyaudio`
-
-- 
 
 ## Setup RPi
 
