@@ -20,7 +20,8 @@ from lib.model import ImageDataModel
 from lib.recording import record_audio
 from lib.transcribe import transcribe_speech
 from lib.ux_feedback_audio import (play_failure, play_interact, play_refusal,
-                                   play_success, play_thinking, play_voicemail_beep)
+                                   play_success, play_thinking,
+                                   play_voicemail_beep)
 from lib.view import DesktopRenderer, ImageRenderer, InkyRenderer, ViewState
 
 try:
@@ -31,8 +32,17 @@ except ImportError:
 AUDIO_REC_SECS = 7
 MIN_DISPLAY_SECS = 28
 MAX_DISPLAY_SECS = 30 * 60 
+NO_MIC_FAKE_PROMPT = choice([
+    "an extra furry, extra cute pikachu",
+    "a long dog made of lasers",
+    "a hamster dressed like a medieval priest"
+])
 
-OPENAPI_BEARER_TOKEN = os.environ.get("OPENAPI_BEARER_TOKEN")
+
+def get_env_or_fail(env_var_name: str):
+    if val := os.environ.get(env_var_name):
+        return val
+    raise Exception(f"Configuration error; Can't find credential env var: {env_var_name}")
 
 
 def watch_fake_random_buttons(button_handler: ButtonHandler):
@@ -56,7 +66,10 @@ class DisplayState(Enum):
 @dataclass
 class AIFrameRunner(ButtonHandler):
 
+    open_api_bearer_token: str
     renderer: ImageRenderer
+    no_mic: bool = False
+    no_audio: bool = False
     displayed_img_path: str = None
     # selected_img_path = None
     displayed_at_time: float = None
@@ -64,6 +77,9 @@ class AIFrameRunner(ButtonHandler):
     max_display_secs = MAX_DISPLAY_SECS  # 30 mins max display time
     display_state: DisplayState = DisplayState.initializing
         
+    def __post_init__(self):
+        print(f"Starting aiframe runner with no-mic={self.no_mic} no-audio={self.no_audio}", file=sys.stderr)
+
     def get_avail_img_paths(self):   
         return ImageDataModel().get_avail_images()
 
@@ -118,12 +134,12 @@ class AIFrameRunner(ButtonHandler):
         if self.display_state == DisplayState.newly_created_img:
             c_emoji = '❌'
         elif self.display_state == DisplayState.normal:
-            c_emoji = '👎'
+            c_emoji = '🤮' # '👎'
 
         view_state = ViewState(
             a_btn_text='➡️',
-            b_btn_text='❤️' if rating < 0 else f'❤️ {rating}',
-            c_btn_text=c_emoji if rating > 0 else f'{c_emoji} {rating}',
+            b_btn_text='❤️' if rating <= 0 else f'❤️ {rating}',
+            c_btn_text=c_emoji if rating >= 0 else f'{c_emoji} {abs(rating)}',
             d_btn_text='🎤',
             img_path=self.displayed_img_path
         )
@@ -133,71 +149,77 @@ class AIFrameRunner(ButtonHandler):
         elif self.display_state == DisplayState.normal:
             self.renderer.render(view_state)
 
-        print(f"At after renderer btw", file=sys.stderr)
+        # FYI: The eink renderer returns before it completes displaying
 
 
     def a(self):
         if self.is_before_min_display_time():
-            play_refusal()
+            play_refusal(dummy=self.no_audio)
             return
 
         if not self.is_before_min_display_time():
             self.display_next()
-            play_interact()
+            play_interact(dummy=self.no_audio)
 
 
     def b(self):
         # Button behaves like: "like"
         if self.is_before_min_display_time():
-            play_refusal()
+            play_refusal(dummy=self.no_audio)
             return
 
         if self.display_state == DisplayState.newly_created_img:
             ImageDataModel().incr_image_rating(self.displayed_img_path, 1)
-            play_interact()
+            play_interact(dummy=self.no_audio)
 
         elif self.display_state == DisplayState.normal:
             ImageDataModel().incr_image_rating(self.displayed_img_path, 1)
-            play_interact()
+            play_interact(dummy=self.no_audio)
 
 
     def c(self):
         # Button behaves like: "dislike" / delete
         if self.is_before_min_display_time():
-            play_refusal()
+            play_refusal(dummy=self.no_audio)
             return
 
         if self.display_state == DisplayState.newly_created_img:
             ImageDataModel().delete_image(self.displayed_img_path)
-            play_interact()
+            play_interact(dummy=self.no_audio)
             
         elif self.display_state == DisplayState.normal:
             ImageDataModel().incr_image_rating(self.displayed_img_path, -1)
-            play_interact()
+            play_interact(dummy=self.no_audio)
         
         else:
-            play_refusal()
+            play_refusal(dummy=self.no_audio)
 
 
     def d(self):
         # Start record / transcribe / generate
         if self.is_before_min_display_time():
-            play_refusal()
+            play_refusal(dummy=self.no_audio)
             return
 
         last_display_state = self.display_state
         self.display_state = DisplayState.waiting_new_img
         try:
-            play_voicemail_beep()
+            play_voicemail_beep(dummy=self.no_audio)
             audio_buffer = record_audio(AUDIO_REC_SECS)
-            play_voicemail_beep()
+            play_voicemail_beep(dummy=self.no_audio)
 
             audio_buffer.seek(0)
 
             threading.Thread(target=play_thinking).start()
-            print("Begin transcribing...", file=sys.stderr)
-            transcription = transcribe_speech(audio_buffer)
-            img_buffer = generate_image(OPENAPI_BEARER_TOKEN, transcription)
+            if self.no_mic:
+                print("Use fake transcription, because no mic")
+                transcription = NO_MIC_FAKE_PROMPT
+            else:
+                print("Begin transcribing...", file=sys.stderr)
+                transcription = transcribe_speech(audio_buffer)
+
+            print(f"Transciption: '{transcription}'", file=sys.stderr)
+            img_buffer = generate_image(self.open_api_bearer_token, transcription)
             img_buffer.seek(0)
 
             with open('imgs/tmp-name.png', 'wb') as fp:
@@ -208,10 +230,10 @@ class AIFrameRunner(ButtonHandler):
         except Exception as err:
             print(f"Failed to display image: {err}", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)
-            play_failure()
+            play_failure(dummy=self.no_audio)
             self.display_state = last_display_state
         else:
-            play_success()
+            play_success(dummy=self.no_audio)
 
 
 def main():
@@ -223,16 +245,25 @@ def main():
         choices=["gpio","keyboard","random"], 
         default="gpio"
     )
+    parser.add_argument('--no-mic', required=False, action='store_true', default=False)
+    parser.add_argument('--no-audio', required=False, action='store_true', default=False)
+
+    OPENAPI_BEARER_TOKEN = get_env_or_fail("OPENAPI_BEARER_TOKEN")
+    get_env_or_fail("GOOGLE_APPLICATION_CREDENTIALS")  # Googles APIs will read this later
 
     args = parser.parse_args()
 
-    aiframerunner_kwargs = {}
+    aiframerunner_kwargs = dict(
+        open_api_bearer_token=OPENAPI_BEARER_TOKEN,
+        no_mic=args.no_mic,
+        no_audio=args.no_audio
+    )
     if auto_inky_setup:
         inky = auto_inky_setup()
         renderer = InkyRenderer(inky=inky, resolution=inky.resolution)
     else:
         renderer = DesktopRenderer(resolution=(600, 448))
-        aiframerunner_kwargs = dict(min_display_secs=3)
+        aiframerunner_kwargs['min_display_secs'] = 3
 
     runner = AIFrameRunner(renderer=renderer, **aiframerunner_kwargs)
     runner.display_random()

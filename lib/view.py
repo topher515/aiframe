@@ -1,11 +1,13 @@
 import sys
-from typing import Tuple
-from dataclasses import dataclass
+from typing import Any, Optional, Tuple
+from dataclasses import MISSING, dataclass, field
 
 from PIL import Image, ImageDraw, ImageFont
 
 from argparse import ArgumentParser
 from pilmoji import Pilmoji
+
+from lib.img_utils import average_image_color, is_closer_to_black_than_white
 
 try:
     from inky.auto import auto
@@ -37,17 +39,24 @@ class ImageRenderer:
 
         input_image.thumbnail(self.resolution)
 
-        canvas = Image.new(mode="RGBA", size=self.resolution)
-        font = ImageFont.truetype('assets/arial.ttf', 24)
+        # avg_color = average_image_color(input_image)
+        if is_closer_to_black_than_white(input_image):
+            bg_color = 'black'
+        else:
+            bg_color = 'white'
+
+        canvas = Image.new(mode="RGB", size=self.resolution, color=bg_color)
+        font = ImageFont.truetype('assets/arial.ttf', 17)
 
         left_offset = int((canvas.width - input_image.width) / 2)
-        canvas.paste(input_image, (left_offset, 0))
-        
+        top_offset = int((canvas.height - input_image.height) / 2)
+        canvas.paste(input_image, (left_offset, top_offset))
+
         with Pilmoji(canvas) as pilmoji:
-            pilmoji.text((2, 16), view_state.a_btn_text, 'white', font)
-            pilmoji.text((10, 16+BTN_SEP_PX), view_state.b_btn_text, 'white', font)
-            pilmoji.text((10, 16+BTN_SEP_PX*2), view_state.c_btn_text, 'white', font)
-            pilmoji.text((10, 16+BTN_SEP_PX*3), view_state.d_btn_text, 'white', font)
+            pilmoji.text((4, 44), view_state.a_btn_text, fill='black', font=font, stroke_fill='white')
+            pilmoji.text((4, 44 + BTN_SEP_PX), view_state.b_btn_text, fill='black', font=font, stroke_fill='white')
+            pilmoji.text((4, 44 + BTN_SEP_PX*2), view_state.c_btn_text, fill='black', font=font, stroke_fill='white')
+            pilmoji.text((4, 44 + BTN_SEP_PX*3), view_state.d_btn_text, fill='black', font=font, stroke_fill='white')
 
         return canvas
 
@@ -61,10 +70,10 @@ class DesktopRenderer(ImageRenderer):
         image = self.render_image(view_state)
         image.show()
 
-
+@dataclass
 class InkyRenderer(ImageRenderer):
 
-    inky: any  # The thing returned by `inky.auto.auto()`
+    inky: Any = None
     saturation: float = 0.5
 
     def __post_init__(self):

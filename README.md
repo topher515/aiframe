@@ -42,6 +42,9 @@
 
 - curl https://get.pimoroni.com/ink | bash
 
+- Install some packages:
+  - `sudo apt-get install portaudio19-dev` (support for `pyaudio`)
+
 - Then manually use `pip3` to install all the stuff in `Pipfile` (pipenv isnt working on my rpi as of now)
 
 - Deploy (i.e., "copy") software to rpi (from host): `./deploy.sh`
@@ -52,3 +55,15 @@
   - `sudo systemctl start aiframe`
   - `sudo systemctl status aiframe`  # Check the status
   - `tail -f /var/log/aiframe.log`   # Tail the logs
+
+- Add ENV VARS to service:
+
+  - See: https://serverfault.com/questions/413397/how-to-set-environment-variable-in-systemd-service
+  - Run `systemctl edit myservice`
+  - Add something like:
+
+```
+[Service]
+Environment="OPENAPI_BEARER_TOKEN=sess-dYH.....hfFdkA"
+Environment="GOOGLE_APPLICATION_CREDENTIALS='speech-to-text-key.json'"
+```
