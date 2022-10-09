@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 import signal
 import sys
 import threading
@@ -11,6 +12,7 @@ from enum import Enum, auto
 from random import choice, randint
 from time import sleep, time
 from typing import Optional
+from uuid import uuid4
 
 from lib.ai_generator import generate_image
 from lib.gpio_watcher import watch_gpio_buttons
@@ -54,6 +56,11 @@ def watch_fake_random_buttons(button_handler: ButtonHandler):
 
     th = threading.Thread(target=randomly_press)
     th.start()
+
+
+def make_dalle_filename(prompt: str):
+    prompt_str = ''.join(x if re.match(r'\w', x) else '_' for x in prompt)
+    return f'aiframe_{prompt_str}_{uuid4().hex}.png'
 
 
 class DisplayState(Enum):
@@ -184,6 +191,7 @@ class AIFrameRunner(ButtonHandler):
             return
 
         if self.display_state == DisplayState.newly_created_img:
+            print(f"Deleting unliked image {self.displayed_img_path}...", file=sys.stderr)
             ImageDataModel().delete_image(self.displayed_img_path)
             play_interact(dummy=self.no_audio)
             
@@ -218,14 +226,17 @@ class AIFrameRunner(ButtonHandler):
                 print("Begin transcribing...", file=sys.stderr)
                 transcription = transcribe_speech(audio_buffer)
 
-            print(f"Transciption: '{transcription}'", file=sys.stderr)
+            print(f"Transcription: '{transcription}'", file=sys.stderr)
             img_buffer = generate_image(self.open_api_bearer_token, transcription)
             img_buffer.seek(0)
 
-            with open('imgs/tmp-name.png', 'wb') as fp:
+            filename = make_dalle_filename(transcription)
+            filepath = f'imgs/{filename}'
+
+            with open(filepath, 'wb') as fp:
                 fp.write(img_buffer.read())
 
-            self.display('imgs/tmp-name.png', as_new=True)
+            self.display(filepath, as_new=True)
 
         except Exception as err:
             print(f"Failed to display image: {err}", file=sys.stderr)
