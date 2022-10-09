@@ -5,6 +5,7 @@ IMGS_TOO="$1"
 # rm -r lib/__pycache__
 scp -r \
     aiframe_runner.py \
+    inspect_audio.py \
     lib \
     Pipfile \
     aiframe.service \

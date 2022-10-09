@@ -6,13 +6,8 @@ from google.cloud import speech
 SAMPLE_RATE = 16000
 
 def transcribe_speech(wav_buffer: BytesIO):
-
     # Instantiates a client
     client = speech.SpeechClient()
-
-    # The name of the audio file to transcribe
-    # gcs_uri = "gs://cloud-samples-data/speech/brooklyn_bridge.raw"
-    # audio = speech.RecognitionAudio(uri=gcs_uri)
 
     print("Uploading audio...", file=sys.stderr)
     audio = speech.RecognitionAudio(content=wav_buffer.read())

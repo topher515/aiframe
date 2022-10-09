@@ -3,10 +3,26 @@
 import sys
 import wave
 from io import BytesIO
-
+import sounddevice as sd
 import pyaudio
 
 SAMPLE_RATE = 16000
+
+
+def _record_audio_fail_attempt(seconds: int) -> BytesIO:
+    # Couldn't get this working
+    channels = 1 
+    bytes_buffer = BytesIO()
+    obj = wave.open(bytes_buffer, 'w')
+    obj.setnchannels(channels)
+    obj.setsampwidth(2)
+    obj.setframerate(SAMPLE_RATE)
+    myrecording = sd.rec(int(seconds * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=channels)
+    obj.writeframesraw(myrecording)
+    sd.wait()
+    obj.close()
+    bytes_buffer.seek(0)
+    return bytes_buffer
 
 
 def record_audio(seconds: int) -> BytesIO:

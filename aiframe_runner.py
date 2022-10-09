@@ -19,7 +19,7 @@ from lib.keyboard_watcher import watch_keyboard_buttons
 from lib.model import ImageDataModel
 from lib.recording import record_audio
 from lib.transcribe import transcribe_speech
-from lib.ux_feedback_audio import (play_failure, play_interact, play_refusal,
+from lib.ux_feedback_audio import (cache_sounds, play_failure, play_interact, play_refusal,
                                    play_success, play_thinking,
                                    play_voicemail_beep)
 from lib.view import DesktopRenderer, ImageRenderer, InkyRenderer, ViewState
@@ -258,6 +258,10 @@ def main():
         no_mic=args.no_mic,
         no_audio=args.no_audio
     )
+
+    if not args.no_audio:
+        cache_sounds()
+
     if auto_inky_setup:
         inky = auto_inky_setup()
         renderer = InkyRenderer(inky=inky, resolution=inky.resolution)
