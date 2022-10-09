@@ -13,6 +13,7 @@ from random import choice, randint
 from time import sleep, time
 from typing import Optional
 from uuid import uuid4
+import sounddevice
 
 from lib.ai_generator import generate_image
 from lib.gpio_watcher import watch_gpio_buttons
@@ -40,6 +41,8 @@ NO_MIC_FAKE_PROMPT = choice([
     "a hamster dressed like a medieval priest"
 ])
 
+IMG_DELETION_DISLIKE_THRESHOLD = 10
+
 
 def get_env_or_fail(env_var_name: str):
     if val := os.environ.get(env_var_name):
@@ -60,6 +63,7 @@ def watch_fake_random_buttons(button_handler: ButtonHandler):
 
 def make_dalle_filename(prompt: str):
     prompt_str = ''.join(x if re.match(r'\w', x) else '_' for x in prompt)
+    prompt_str = prompt_str[:55] # Arbitraryily restrict length of filename
     return f'aiframe_{prompt_str}_{uuid4().hex}.png'
 
 
@@ -176,12 +180,12 @@ class AIFrameRunner(ButtonHandler):
             return
 
         if self.display_state == DisplayState.newly_created_img:
-            ImageDataModel().incr_image_rating(self.displayed_img_path, 1)
             play_interact(dummy=self.no_audio)
+            ImageDataModel().incr_image_rating(self.displayed_img_path, 1)
 
         elif self.display_state == DisplayState.normal:
-            ImageDataModel().incr_image_rating(self.displayed_img_path, 1)
             play_interact(dummy=self.no_audio)
+            ImageDataModel().incr_image_rating(self.displayed_img_path, 1)
 
 
     def c(self):
@@ -191,14 +195,16 @@ class AIFrameRunner(ButtonHandler):
             return
 
         if self.display_state == DisplayState.newly_created_img:
+            play_interact(dummy=self.no_audio)
             print(f"Deleting unliked image {self.displayed_img_path}...", file=sys.stderr)
             ImageDataModel().delete_image(self.displayed_img_path)
-            play_interact(dummy=self.no_audio)
             
         elif self.display_state == DisplayState.normal:
-            ImageDataModel().incr_image_rating(self.displayed_img_path, -1)
             play_interact(dummy=self.no_audio)
-        
+            ImageDataModel().incr_image_rating(self.displayed_img_path, -1)
+            if ImageDataModel.get_image_rating(self.displayed_img_path) >= IMG_DELETION_DISLIKE_THRESHOLD:
+                ImageDataModel().delete_image(self.displayed_img_path)
+
         else:
             play_refusal(dummy=self.no_audio)
 
@@ -218,7 +224,7 @@ class AIFrameRunner(ButtonHandler):
 
             audio_buffer.seek(0)
 
-            threading.Thread(target=play_thinking).start()
+            play_thinking(dummy=self.no_audio)
             if self.no_mic:
                 print("Use fake transcription, because no mic")
                 transcription = NO_MIC_FAKE_PROMPT
@@ -231,7 +237,7 @@ class AIFrameRunner(ButtonHandler):
             img_buffer.seek(0)
 
             filename = make_dalle_filename(transcription)
-            filepath = f'imgs/{filename}'
+            filepath = os.path.join(os.getcwd(), "imgs" , filename)
 
             with open(filepath, 'wb') as fp:
                 fp.write(img_buffer.read())
@@ -239,7 +245,7 @@ class AIFrameRunner(ButtonHandler):
             self.display(filepath, as_new=True)
 
         except Exception as err:
-            print(f"Failed to display image: {err}", file=sys.stderr)
+            print(f"Failed to generate and display image: {err}", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)
             play_failure(dummy=self.no_audio)
             self.display_state = last_display_state
@@ -271,6 +277,8 @@ def main():
     )
 
     if not args.no_audio:
+        print("Available sound devices...", file=sys.stderr)
+        print(sounddevice.query_devices(), file=sys.stderr)
         cache_sounds()
 
     if auto_inky_setup:
@@ -294,7 +302,7 @@ def main():
 
     while True:
         runner.poke()
-        sleep(1)
+        sleep(5)
 
 
 if __name__ == '__main__':

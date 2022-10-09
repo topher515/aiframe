@@ -1,90 +1,49 @@
 #!/usr/bin/env python3
 
 import sys
-import wave
 from io import BytesIO
-import sounddevice as sd
-import pyaudio
-
-SAMPLE_RATE = 16000
+import sounddevice
+import soundfile
 
 
-def _record_audio_fail_attempt(seconds: int) -> BytesIO:
-    # Couldn't get this working
-    channels = 1 
-    bytes_buffer = BytesIO()
-    obj = wave.open(bytes_buffer, 'w')
-    obj.setnchannels(channels)
-    obj.setsampwidth(2)
-    obj.setframerate(SAMPLE_RATE)
-    myrecording = sd.rec(int(seconds * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=channels)
-    obj.writeframesraw(myrecording)
-    sd.wait()
-    obj.close()
-    bytes_buffer.seek(0)
-    return bytes_buffer
+def iter_input_devices():
+    for dev in sounddevice.query_devices():
+        if dev.get("max_input_channels") > 0:
+            yield dev
 
+def get_input_device_info():
+    # Find preferred
+    for dev in iter_input_devices():
+        if 'USB PnP Sound Device' in dev['name']:
+            return dev
 
+    # Use the one called default
+    for dev in iter_input_devices():
+        if 'default' == dev['name']:
+            return dev
+    
+    # Ok just use the first one we see
+    for dev in iter_input_devices():
+        return dev
+
+    
 def record_audio(seconds: int) -> BytesIO:
 
-    chunk = 1024  # Record in chunks of 1024 samples
-    sample_format = pyaudio.paInt16  # 16 bits per sample
-    channels = 1
-    # fs = 44100  # Record at 44100 samples per second
-    fs = SAMPLE_RATE
-    filename = "output.wav"
+    device_info = get_input_device_info()
+    channels = 1 
+    samplerate = int(device_info["default_samplerate"])
+
+    print(f'Using sound input device name="{device_info["name"]}" samplerate={samplerate}', file=sys.stderr)
+
+    rec = sounddevice.rec(
+        int(seconds * samplerate), 
+        samplerate=samplerate, 
+        channels=channels
+    )
+    sounddevice.wait()
 
     bytes_buffer = BytesIO()
-
-    p = pyaudio.PyAudio()  # Create an interface to PortAudio
-
-    print(f'Recording for {seconds} seconds', file=sys.stderr)
-
-
-    class dummy:
-        recording = True
-
-    def on_press():
-        dummy.recording = False
-
-    # listener = keyboard.Listener(on_press=on_press)
-    # listener.start() 
-
-    stream = p.open(format=sample_format,
-                    channels=channels,
-                    rate=fs,
-                    frames_per_buffer=chunk,
-                    input=True)
-
-    frames = []  # Initialize array to store frames
-
-    # Store data in chunks for a few seconds or early escape
-
-    for i in range(0, int(fs / chunk * seconds)):
-        data = stream.read(chunk)
-        frames.append(data)
-        if not dummy.recording:
-            print("Exit early", file=sys.stderr)
-            break
-
-    # listener.stop()
-
-    # Stop and close the stream 
-    stream.stop_stream()
-    stream.close()
-    # Terminate the PortAudio interface
-    p.terminate()
-
-    print('Finished recording', file=sys.stderr)
-
-    # Save the recorded data as a WAV file
-    wf = wave.open(bytes_buffer, 'wb')
-    wf.setnchannels(channels)
-    wf.setsampwidth(p.get_sample_size(sample_format))
-    wf.setframerate(fs)
-    wf.writeframes(b''.join(frames))
-    wf.close()
-
-    # bytes_buffer.seek(0)
+    soundfile.write(bytes_buffer, rec, samplerate, format='wav')
+    bytes_buffer.seek(0)
 
     return bytes_buffer

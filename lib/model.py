@@ -54,6 +54,6 @@ class ImageDataModel:
     # def set_cur_image_path(self, img_path: str):
     #     self.cur_image_path = img_path
         
-    def delete_image(self, img_path):
+    def delete_image(self, img_path: str):
         os.remove(img_path)
     

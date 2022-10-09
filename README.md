@@ -66,11 +66,11 @@ OpenAI's Dalle to AI generate the prompt into an iamge.
 - Add ENV VARS to service:
 
   - See: https://serverfault.com/questions/413397/how-to-set-environment-variable-in-systemd-service
-  - Run `systemctl edit myservice`
+  - Run `sudo systemctl edit aiframe`
   - Add something like:
 
 ```
 [Service]
 Environment="OPENAPI_BEARER_TOKEN=sess-dYH.....hfFdkA"
-Environment="GOOGLE_APPLICATION_CREDENTIALS='speech-to-text-key.json'"
+Environment="GOOGLE_APPLICATION_CREDENTIALS='/home/pi/app/speech-to-text-key.json'"
 ```

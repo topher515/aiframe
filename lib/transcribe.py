@@ -3,7 +3,9 @@ from io import BytesIO
 
 from google.cloud import speech
 
-SAMPLE_RATE = 16000
+# from 
+
+# SAMPLE_RATE = 16000  # 44100
 
 def transcribe_speech(wav_buffer: BytesIO):
     # Instantiates a client
@@ -14,7 +16,7 @@ def transcribe_speech(wav_buffer: BytesIO):
 
     config = speech.RecognitionConfig(
         encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=SAMPLE_RATE,
+        # sample_rate_hertz=SAMPLE_RATE,
         language_code="en-US",
     )
 
