@@ -169,8 +169,8 @@ class AIFrameRunner(ButtonHandler):
             return
 
         if not self.is_before_min_display_time():
-            self.display_next()
             play_interact(dummy=self.no_audio)
+            self.display_next()
 
 
     def b(self):
